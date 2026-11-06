@@ -80,12 +80,7 @@ jobs:
             /p:Platform=Win32 `
             /p:PlatformToolset=v143 `
             /m
-
-      - name: Upload DLL
-        uses: actions/upload-artifact@v4
-        with:
-          name: Quicksilver-CBAS-Build
-          path: CBAS/artifacts/data/obse/plugins/*.dll
+            
       - name: Upload DLL
         uses: actions/upload-artifact@v4
         with:
