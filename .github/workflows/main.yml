@@ -43,17 +43,19 @@ jobs:
           Copy-Item "$source\common\*" `
             "$root\common" -Recurse -Force
 
-          # Find and copy the original OBSE precompiled header
-          $stdafx = Get-ChildItem "$source" `
-            -Filter "stdafx.h" -Recurse -File |
-            Select-Object -First 1
+          # Inspect the actual OBSE source files
+          Write-Host "Checking OBSE source layout..."
 
-          if (!$stdafx) {
-            throw "StdAfx.h was not found in the original OBSE source."
-          }
+          Write-Host "GameActorValues.cpp:"
+          Get-Content "$root\obse\obse\GameActorValues.cpp" -TotalCount 10
 
-          Copy-Item $stdafx.FullName `
-            "$root\obse\obse\stdafx.h" -Force
+          Write-Host "Searching for precompiled headers..."
+
+          Get-ChildItem "$root\OBSE_SOURCE\src" `
+            -Include "stdafx.h","StdAfx.h" -Recurse -File |
+            ForEach-Object {
+              Write-Host $_.FullName
+            }
 
           # Fix missing standard string includes
           $headers = @(
