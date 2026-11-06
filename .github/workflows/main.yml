@@ -42,6 +42,20 @@ jobs:
 
           Copy-Item "$source\common\*" `
             "$root\common" -Recurse -Force
+            # Make the precompiled header available to OBSE source files
+          $stdafx = Get-ChildItem "$root\obse" `
+            -Filter "StdAfx.h" -Recurse -File |
+            Select-Object -First 1
+
+          if (!$stdafx) {
+            throw "StdAfx.h was not found in the OBSE source."
+          }
+
+          $targetHeader = "$root\obse\obse\stdafx.h"
+
+          if ($stdafx.FullName -ne $targetHeader) {
+            Copy-Item $stdafx.FullName $targetHeader -Force
+          }
               
               # Fix missing standard string includes
           $headers = @(
