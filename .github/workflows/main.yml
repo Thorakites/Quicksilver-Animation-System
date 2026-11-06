@@ -11,36 +11,64 @@ jobs:
     runs-on: windows-2022
 
     steps:
-      - name: Download Quicksilver source
+      - name: Download CBAS source
         uses: actions/checkout@v4
         with:
           path: CBAS
 
-      - name: Download xOBSE dependencies
+      - name: Download original OBSE source
         uses: actions/checkout@v4
         with:
-          repository: llde/xOBSE
-          path: obse
+          repository: nh2/obse
+          path: OBSE_SOURCE
 
       - name: Install MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Prepare build folders
+      - name: Prepare dependencies
         shell: pwsh
         run: |
-          $root = "${{ github.workspace }}\CBAS"
-          $output = "$root\artifacts"
+          $root = "${{ github.workspace }}"
+          $source = "$root\OBSE_SOURCE\src"
 
           New-Item -ItemType Directory -Force `
-            -Path "$output\data\obse\plugins" | Out-Null
+            -Path "$root\obse" | Out-Null
 
-          $props = Join-Path $root "EnvPaths.props"
+          New-Item -ItemType Directory -Force `
+            -Path "$root\common" | Out-Null
+
+          Copy-Item "$source\obse\*" `
+            "$root\obse" -Recurse -Force
+
+          Copy-Item "$source\common\*" `
+            "$root\common" -Recurse -Force
+
+          if (!(Test-Path "$root\obse\obse\GameObjects.cpp")) {
+            throw "OBSE source files are missing."
+          }
+
+          if (!(Test-Path "$root\common\common.vcxproj")) {
+            throw "Common project is missing."
+          }
+
+      - name: Prepare output
+        shell: pwsh
+        run: |
+          $root = "${{ github.workspace }}"
+
+          New-Item -ItemType Directory -Force `
+            -Path "$root\CBAS\artifacts\data\obse\plugins" |
+            Out-Null
+
+          $props = "$root\CBAS\EnvPaths.props"
 
           $content = Get-Content $props -Raw
 
-          $content = $content -replace `
-            '<OblivionPath>.*?</OblivionPath>', `
-            "<OblivionPath>$output</OblivionPath>"
+          $content = [regex]::Replace(
+            $content,
+            '<OblivionPath>.*?</OblivionPath>',
+            "<OblivionPath>$root\CBAS\artifacts</OblivionPath>"
+          )
 
           Set-Content $props $content
 
@@ -53,6 +81,11 @@ jobs:
             /p:PlatformToolset=v143 `
             /m
 
+      - name: Upload DLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: Quicksilver-CBAS-Build
+          path: CBAS/artifacts/data/obse/plugins/*.dll
       - name: Upload DLL
         uses: actions/upload-artifact@v4
         with:
