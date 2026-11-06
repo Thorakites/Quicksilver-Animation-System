@@ -42,6 +42,22 @@ jobs:
 
           Copy-Item "$source\common\*" `
             "$root\common" -Recurse -Force
+              
+              # Fix missing standard string includes
+          $headers = @(
+            "$root\common\IPipeClient.h",
+            "$root\common\IDirectoryIterator.h"
+          )
+
+          foreach ($header in $headers) {
+            $content = Get-Content $header -Raw
+
+            if ($content -notmatch '#include\s*<string>') {
+              Set-Content -Path $header `
+                -Value ("#include <string>`r`n" + $content) `
+                -Encoding utf8
+            }
+          }
 
           if (!(Test-Path "$root\obse\obse\GameObjects.cpp")) {
             throw "OBSE source files are missing."
