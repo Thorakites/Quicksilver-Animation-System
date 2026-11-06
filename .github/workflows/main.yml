@@ -112,7 +112,63 @@ jobs:
                 -Encoding utf8
             }
           }
+          # Fix old OBSE va_start reference incompatibility
+          $utilitiesHeader = "$root\obse\obse\Utilities.h"
+          $utilitiesCpp = "$root\obse\obse\Utilities.cpp"
 
+          $headerContent = Get-Content $utilitiesHeader -Raw
+
+          $oldDeclaration = 'void Show(Message& msg, ...);'
+
+          $newDeclaration = @'
+          template <typename... Args>
+          void Show(Message& msg, Args... args)
+          {
+              char msgText[0x400];
+              sprintf_s(msgText, sizeof(msgText), msg.fmt, args...);
+
+              if (msg.bCanDisable)
+              {
+                  if (!msg.bDisabled)
+                      if (ShowWarning(msgText))
+                          msg.bDisabled = true;
+              }
+              else
+                  ShowError(msgText);
+          }
+          '@
+
+          if (!$headerContent.Contains($oldDeclaration)) {
+            throw "Could not find the old ErrOutput declaration."
+          }
+
+          $headerContent = $headerContent.Replace(
+            $oldDeclaration,
+            $newDeclaration
+          )
+
+          if ($headerContent -notmatch '#include\s*<stdio\.h>') {
+            $headerContent = $headerContent.Replace(
+              '#pragma once',
+              "#pragma once`r`n#include <stdio.h>"
+            )
+          }
+
+          Set-Content $utilitiesHeader $headerContent -Encoding utf8
+
+          $cppContent = Get-Content $utilitiesCpp -Raw
+
+          $pattern = '(?s)void ErrOutput::Show\(ErrOutput::Message& msg, \.\.\.\)\s*\{\s*va_list args;\s*va_start\(args, msg\);\s*vShow\(msg, args\);\s*\}'
+
+          if ($cppContent -notmatch $pattern) {
+            throw "Could not find the old ErrOutput::Show implementation."
+          }
+
+          $cppContent = [regex]::Replace($cppContent, $pattern, '', 1)
+
+          Set-Content $utilitiesCpp $cppContent -Encoding utf8
+
+          Write-Host "Applied OBSE va_start compatibility fix."
           if (!(Test-Path "$root\obse\obse\GameObjects.cpp")) {
             throw "OBSE source files are missing."
           }
