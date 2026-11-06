@@ -43,19 +43,59 @@ jobs:
           Copy-Item "$source\common\*" `
             "$root\common" -Recurse -Force
 
-          # Inspect the actual OBSE source files
-          Write-Host "Checking OBSE source layout..."
+          # Create the missing OBSE precompiled header
+          $stdafxHeader = "$root\obse\StdAfx.h"
 
-          Write-Host "GameActorValues.cpp:"
-          Get-Content "$root\obse\obse\GameActorValues.cpp" -TotalCount 10
+          @'
+          #pragma once
 
-          Write-Host "Searching for precompiled headers..."
+          #include <winsock2.h>
+          #include <windows.h>
+          #include <windowsx.h>
+          #include <commctrl.h>
+          #include <richedit.h>
+          #include <shlobj.h>
+          #include <rpc.h>
+          #include <dbghelp.h>
+          #include <uxtheme.h>
+          #include <objbase.h>
+          #include <psapi.h>
 
-          Get-ChildItem "$root\OBSE_SOURCE\src" `
-            -Include "stdafx.h","StdAfx.h" -Recurse -File |
-            ForEach-Object {
-              Write-Host $_.FullName
-            }
+          #include <time.h>
+          #include <intrin.h>
+          #include <errno.h>
+          #include <malloc.h>
+          #include <stdio.h>
+
+          #include <cstdlib>
+          #include <cstdio>
+          #include <cstring>
+          #include <cassert>
+          #include <cstdarg>
+          #include <cmath>
+          #include <algorithm>
+          #include <list>
+          #include <map>
+          #include <vector>
+          #include <set>
+          #include <queue>
+          #include <stack>
+          #include <string>
+          #include <fstream>
+          #include <stdexcept>
+          #include <exception>
+          #include <sstream>
+          #include <memory>
+          #include <iostream>
+          #include <functional>
+          #include <limits>
+          '@ | Set-Content -Path $stdafxHeader -Encoding utf8
+
+          # Create the missing source file
+          Set-Content -Path "$root\obse\StdAfx.cpp" `
+            -Value '#include "stdafx.h"' -Encoding utf8
+
+          Write-Host "Created StdAfx.h and StdAfx.cpp."
 
           # Fix missing standard string includes
           $headers = @(
