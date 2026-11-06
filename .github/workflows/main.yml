@@ -1,140 +1,135 @@
 name: Quicksilver DLL Build
 
 on:
-workflow_dispatch:
-push:
-branches:
-- main
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
-build:
-runs-on: windows-2022
+  build:
+    runs-on: windows-2022
 
-steps:
-  - name: Download CBAS source
-    uses: actions/checkout@v4
-    with:
-      path: CBAS
+    steps:
+      - name: Download CBAS source
+        uses: actions/checkout@v4
+        with:
+          path: CBAS
 
-  - name: Download original OBSE source
-    uses: actions/checkout@v4
-    with:
-      repository: nh2/obse
-      path: OBSE_SOURCE
+      - name: Download original OBSE source
+        uses: actions/checkout@v4
+        with:
+          repository: nh2/obse
+          path: OBSE_SOURCE
 
-  - name: Install MSBuild
-    uses: microsoft/setup-msbuild@v2
+      - name: Install MSBuild
+        uses: microsoft/setup-msbuild@v2
 
-  - name: Prepare dependencies
-    shell: pwsh
-    run: |
-      $root = "${{ github.workspace }}"
-      $source = "$root\OBSE_SOURCE\src"
+      - name: Prepare dependencies
+        shell: pwsh
+        run: |
+          $root = "${{ github.workspace }}"
+          $source = "$root\OBSE_SOURCE\src"
 
-      New-Item -ItemType Directory -Force `
-        -Path "$root\obse" | Out-Null
+          New-Item -ItemType Directory -Force `
+            -Path "$root\obse" | Out-Null
 
-      New-Item -ItemType Directory -Force `
-        -Path "$root\common" | Out-Null
+          New-Item -ItemType Directory -Force `
+            -Path "$root\common" | Out-Null
 
-      Copy-Item "$source\obse\*" `
-        "$root\obse" -Recurse -Force
+          Copy-Item "$source\obse\*" `
+            "$root\obse" -Recurse -Force
 
-      Copy-Item "$source\common\*" `
-        "$root\common" -Recurse -Force
+          Copy-Item "$source\common\*" `
+            "$root\common" -Recurse -Force
 
-      # Find and copy the original OBSE precompiled header
-      $stdafx = Get-ChildItem "$source" `
-        -Filter "stdafx.h" -Recurse -File |
-        Select-Object -First 1
+          # Find and copy the original OBSE precompiled header
+          $stdafx = Get-ChildItem "$source" `
+            -Filter "stdafx.h" -Recurse -File |
+            Select-Object -First 1
 
-      if (!$stdafx) {
-        throw "StdAfx.h was not found in the original OBSE source."
-      }
+          if (!$stdafx) {
+            throw "StdAfx.h was not found in the original OBSE source."
+          }
 
-      Copy-Item $stdafx.FullName `
-        "$root\obse\obse\stdafx.h" -Force
+          Copy-Item $stdafx.FullName `
+            "$root\obse\obse\stdafx.h" -Force
 
-      # Fix missing standard string includes
-      $headers = @(
-        "$root\common\IPipeClient.h",
-        "$root\common\IDirectoryIterator.h"
-      )
+          # Fix missing standard string includes
+          $headers = @(
+            "$root\common\IPipeClient.h",
+            "$root\common\IDirectoryIterator.h"
+          )
 
-      foreach ($header in $headers) {
-        $content = Get-Content $header -Raw
+          foreach ($header in $headers) {
+            $content = Get-Content $header -Raw
 
-        if ($content -notmatch '#include\s*<string>') {
-          Set-Content -Path $header `
-            -Value ("#include <string>`r`n" + $content) `
-            -Encoding utf8
-        }
-      }
-
-      if (!(Test-Path "$root\obse\obse\GameObjects.cpp")) {
-        throw "OBSE source files are missing."
-      }
-
-      if (!(Test-Path "$root\common\common.vcxproj")) {
-        throw "Common project is missing."
-      }
-
-  - name: Diagnose OBSE headers
-    shell: pwsh
-    run: |
-      $root = "${{ github.workspace }}"
-
-      Write-Host "Searching for all GameExtraData.h files..."
-
-      Get-ChildItem $root -Filter GameExtraData.h -Recurse -File |
-        ForEach-Object {
-          Write-Host ""
-          Write-Host "HEADER FOUND: $($_.FullName)"
-
-          Select-String -Path $_.FullName `
-            -Pattern 'EntryExtendData|struct Entry\b|class ExtraContainerChanges' |
-            ForEach-Object {
-              Write-Host "$($_.LineNumber): $($_.Line.Trim())"
+            if ($content -notmatch '#include\s*<string>') {
+              Set-Content -Path $header `
+                -Value ("#include <string>`r`n" + $content) `
+                -Encoding utf8
             }
-        }
+          }
 
-  - name: Prepare output
-    shell: pwsh
-    run: |
-      $root = "${{ github.workspace }}"
+          if (!(Test-Path "$root\obse\obse\GameObjects.cpp")) {
+            throw "OBSE source files are missing."
+          }
 
-      New-Item -ItemType Directory -Force `
-        -Path "$root\CBAS\artifacts\data\obse\plugins" |
-        Out-Null
+          if (!(Test-Path "$root\common\common.vcxproj")) {
+            throw "Common project is missing."
+          }
 
-      $props = "$root\CBAS\EnvPaths.props"
+      - name: Diagnose OBSE headers
+        shell: pwsh
+        run: |
+          $root = "${{ github.workspace }}"
 
-      $content = Get-Content $props -Raw
+          Write-Host "Searching for all GameExtraData.h files..."
 
-      $content = [regex]::Replace(
-        $content,
-        '<OblivionPath>.*?</OblivionPath>',
-        "<OblivionPath>$root\CBAS\artifacts</OblivionPath>"
-      )
+          Get-ChildItem $root -Filter GameExtraData.h -Recurse -File |
+            ForEach-Object {
+              Write-Host ""
+              Write-Host "HEADER FOUND: $($_.FullName)"
 
-      Set-Content $props $content
+              Select-String -Path $_.FullName `
+                -Pattern 'EntryExtendData|struct Entry\b|class ExtraContainerChanges' |
+                ForEach-Object {
+                  Write-Host "$($_.LineNumber): $($_.Line.Trim())"
+                }
+            }
 
-  - name: Build original CBAS
-    shell: pwsh
-    run: |
-      msbuild CBAS/CharacterBasedAttackSpeed.sln `
-        /p:Configuration=Release `
-        /p:Platform=Win32 `
-        /p:PlatformToolset=v143 `
-        /m
+      - name: Prepare output
+        shell: pwsh
+        run: |
+          $root = "${{ github.workspace }}"
 
-  - name: Upload DLL
-    uses: actions/upload-artifact@v4
-    with:
-      name: Quicksilver-CBAS-Build
-      path: CBAS/artifacts/data/obse/plugins/*.dll
-  - name: Upload DLL
-    uses: actions/upload-artifact@v4
-    with:
-      name: Quicksilver-CBAS-Build
-      path: CBAS/artifacts/data/obse/plugins/*.dll
+          New-Item -ItemType Directory -Force `
+            -Path "$root\CBAS\artifacts\data\obse\plugins" |
+            Out-Null
+
+          $props = "$root\CBAS\EnvPaths.props"
+
+          $content = Get-Content $props -Raw
+
+          $content = [regex]::Replace(
+            $content,
+            '<OblivionPath>.*?</OblivionPath>',
+            "<OblivionPath>$root\CBAS\artifacts</OblivionPath>"
+          )
+
+          Set-Content $props $content
+
+      - name: Build original CBAS
+        shell: pwsh
+        run: |
+          msbuild CBAS/CharacterBasedAttackSpeed.sln `
+            /p:Configuration=Release `
+            /p:Platform=Win32 `
+            /p:PlatformToolset=v143 `
+            /m
+
+      - name: Upload DLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: Quicksilver-CBAS-Build
+          path: CBAS/artifacts/data/obse/plugins/*.dll
