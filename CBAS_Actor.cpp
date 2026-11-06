@@ -234,7 +234,16 @@ void CBAS_Actors::SetAttackSpeed(void* p){
 //_DOUT("	GOT ACTOR FROM %p",p);
 		//Change the time period of the animation to the desired attack speed
 		_DOUT("CURRENT PERIOD IS: %f",(reinterpret_cast<CBAS_ActorAnimData*>(p))->t_period);
-		(reinterpret_cast<CBAS_ActorAnimData*>(p))->t_period = AttackSpeedFromActor(a);
+		float currentPeriod = (reinterpret_cast<CBAS_ActorAnimData*>(p))->t_period;
+float cbasPeriod = AttackSpeedFromActor(a);
+
+if (g_thePlayer && a == *g_thePlayer)
+{
+    _MESSAGE("[Quicksilver Test] Player period before: %f | CBAS value: %f",
+        currentPeriod, cbasPeriod);
+}
+
+(reinterpret_cast<CBAS_ActorAnimData*>(p))->t_period = cbasPeriod;
 	} else {
 		//if we can't get actor
 _DOUT("	Didn't get actor from %p",p);
