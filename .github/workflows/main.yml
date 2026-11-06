@@ -51,10 +51,29 @@ jobs:
             throw "Common project is missing."
           }
 
-      - name: Prepare output
+      - name: Diagnose OBSE headers
         shell: pwsh
         run: |
           $root = "${{ github.workspace }}"
+
+          Write-Host "Searching for all GameExtraData.h files..."
+
+          Get-ChildItem $root -Filter GameExtraData.h -Recurse -File |
+            ForEach-Object {
+              Write-Host ""
+              Write-Host "HEADER FOUND: $($_.FullName)"
+
+              Select-String -Path $_.FullName `
+                -Pattern 'EntryExtendData|struct Entry\b|class ExtraContainerChanges' |
+                ForEach-Object {
+                  Write-Host "$($_.LineNumber): $($_.Line.Trim())"
+                }
+            }
+      
+      - name: Prepare output
+        shell: pwsh
+        run: |
+         $root = "${{ github.workspace }}"
 
           New-Item -ItemType Directory -Force `
             -Path "$root\CBAS\artifacts\data\obse\plugins" |
