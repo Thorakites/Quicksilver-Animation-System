@@ -206,6 +206,16 @@ float CBAS_Actors::AttackSpeedFromActor(Actor* a){
 	CBAS_ActorVals* AV;
 	CBAS_ActorVals *n_AV = new CBAS_ActorVals(a);		//new actor vals to compare against
 
+	// Quicksilver bow handling:
+	// Bypass CBAS's known bow calculation (hard-coded draw-time issue).
+	// NPCs and the player outside Focus retain vanilla bow timing.
+	// Only the player holding the Focus token receives the QS multiplier.
+	if (n_AV->wep->type == CBAS_Lib::kType_Bow) {
+		if (g_thePlayer && a == *g_thePlayer && PlayerHasFocusToken())
+			return GETINI(QS_PlayerAttackMultiplier);
+		return 1.0f;
+	}
+
 	//No need to proceed if actor is wielding a weapon type that is disabled
 	if( ((n_AV->wep->type == CBAS_Lib::kType_Bow) && !GETINI(CBAS_Bows)) 
 		||  ((n_AV->wep->type == CBAS_Lib::kType_Staff) && !GETINI(CBAS_Staves))
