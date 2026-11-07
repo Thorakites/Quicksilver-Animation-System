@@ -216,14 +216,15 @@ jobs:
           )
 
           Set-Content $props $content
-      - name: Apply Quicksilver CBAS changes
+      - name: Locate Quicksilver CBAS source
         shell: pwsh
         run: |
-          Copy-Item `
-            "$env:GITHUB_WORKSPACE\CBAS_Actor.cpp" `
-            "$env:GITHUB_WORKSPACE\CBAS\CBAS_Actor.cpp" `
-            -Force
-          Write-Host "Applied Quicksilver CBAS_Actor.cpp"
+          Write-Host "WORKSPACE:"
+          Write-Host $env:GITHUB_WORKSPACE
+
+          Write-Host "SEARCHING FOR CBAS_Actor.cpp:"
+          Get-ChildItem $env:GITHUB_WORKSPACE -Recurse -Filter CBAS_Actor.cpp |
+            Select-Object -ExpandProperty FullName
       - name: Build original CBAS
         shell: pwsh
         run: |
