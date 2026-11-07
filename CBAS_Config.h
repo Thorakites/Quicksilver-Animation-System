@@ -35,6 +35,8 @@ namespace CBAS_Config
 		CBAS_FinalMult,
 		CBAS_LowMult,
 
+		QS_PlayerAttackMultiplier,
+
 		//CBAS_Alacrity_SpeedAgi,
 		CBAS_FatigueThreshold,
 		CBAS_LocalisedEncumbrance,
