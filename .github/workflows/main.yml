@@ -224,11 +224,11 @@ jobs:
       - name: Apply Quicksilver CBAS changes
         shell: pwsh
         run: |
-          Copy-Item `
-            "$env:GITHUB_WORKSPACE\Quicksilver\CBAS_Actor.cpp" `
-            "$env:GITHUB_WORKSPACE\CBAS\CBAS_Actor.cpp" `
-            -Force
-          Write-Host "Applied Quicksilver CBAS_Actor.cpp"
+          Copy-Item "$env:GITHUB_WORKSPACE\Quicksilver\CBAS_Actor.cpp" "$env:GITHUB_WORKSPACE\CBAS\CBAS_Actor.cpp" -Force
+          Copy-Item "$env:GITHUB_WORKSPACE\Quicksilver\CBAS_Config.cpp" "$env:GITHUB_WORKSPACE\CBAS\CBAS_Config.cpp" -Force
+          Copy-Item "$env:GITHUB_WORKSPACE\Quicksilver\CBAS_Config.h" "$env:GITHUB_WORKSPACE\CBAS\CBAS_Config.h" -Force
+
+          Write-Host "Applied all three Quicksilver CBAS source files"
       - name: Build original CBAS
         shell: pwsh
         run: |
