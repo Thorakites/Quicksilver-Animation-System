@@ -37,7 +37,7 @@ static IniEntry* CBAS_IniEntries[CBAS_EndEntries] = {
 
 	new IniEntry(CBAS_HeadingsStrings[CBAS_Settings],"fCBAS_Multiplier",1.f),
 	new IniEntry(CBAS_HeadingsStrings[CBAS_Settings],"fCBAS_LowMult",.4f),
-
+	new IniEntry(CBAS_HeadingsStrings[CBAS_Settings],"fQuicksilver_PlayerAttackMultiplier",1.f),
 	//new IniEntry(CBAS_HeadingsStrings[CBAS_Settings],"fCBAS_CBAS_Alacrity_SpeedAgi",0.5f),
 	new IniEntry(CBAS_HeadingsStrings[CBAS_Settings],"fCBAS_FatigueThreshold",1.f),
 	new IniEntry(CBAS_HeadingsStrings[CBAS_Settings],"fCBAS_LocalisedEncumbrance",.75f),
