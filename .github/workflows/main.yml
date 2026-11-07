@@ -216,7 +216,14 @@ jobs:
           )
 
           Set-Content $props $content
-
+      - name: Apply Quicksilver CBAS changes
+        shell: pwsh
+        run: |
+          Copy-Item `
+            "$env:GITHUB_WORKSPACE\CBAS_Actor.cpp" `
+            "$env:GITHUB_WORKSPACE\CBAS\CBAS_Actor.cpp" `
+            -Force
+          Write-Host "Applied Quicksilver CBAS_Actor.cpp"
       - name: Build original CBAS
         shell: pwsh
         run: |
