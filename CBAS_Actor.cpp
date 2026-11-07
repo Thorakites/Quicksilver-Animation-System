@@ -88,9 +88,15 @@ void CBAS_ActorVals::UpdateAttackSpeed(Actor* a) {
 	_DOUT("	Raw (POST PRSNK): %f",aSpd);
 
 	aSpd *= GETINI(CBAS_FinalMult);
+	
+	// Quicksilver: apply additional attack-speed multiplier to the player only
+	if (g_thePlayer && a == *g_thePlayer)
+	{
+    aSpd *= GETINI(QS_PlayerAttackMultiplier);
+	}
 
 	_DOUT("	Final (Config Multiplier): %f",aSpd);
-}
+	}
 
 
 
