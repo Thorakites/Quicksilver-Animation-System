@@ -1,3 +1,259 @@
+#include "CBAS_Actor.h"
+#include "obse/GameData.h"
+#include "obse/GameAPI.h"
+
+//constants
+#define DEFAULT_ATTACK_SPEED 1.0f		//in case of emergency, default aspd
+
+#define TOUCH_INTERVAL 200				//CBAS code is run every frame during weapon action but to improve performance we only check each animdata pointer once every 0.2s
+
+#define UPDATE_INTERVAL 2000			//attack speed updated every 2000 or if wep changed
+#define CLEANSE_CHECK_INTERVAL 60000	//check if any actors need to be removed from the map every 1 min
+#define CLEANSE_INTERVAL 30000			//actors are removed from the map if they haven't been updated in last 30 seconds
+
+//functions
+#define TIME_PASSED(t,i) ((t + i) < GetTickCount())
+#define GETINI( x ) (*CBAS_IniHandler)(CBAS_Config::IniEntries::x)
+
+#define DIFF(d) SInt32(d - compareWith->d)
+#define A_DIFF(x) (abs(DIFF(x))
+#define AA_DIFF(y,z) (A_DIFF(y) > z))
+
+
+
+// Returns true while the player owns the Quicksilver Focus activation token.
+// The token's local FormID is 0x001C4E39; resolve the plugin index at runtime.
+static bool PlayerHasFocusToken()
+{
+    if (!g_thePlayer || !*g_thePlayer || !g_dataHandler || !*g_dataHandler)
+        return false;
+
+    const UInt8 modIndex = (*g_dataHandler)->GetModIndex("Quicksilver.esp");
+    if (modIndex == 0xFF)
+        return false;
+
+    const UInt32 tokenFormID = (static_cast<UInt32>(modIndex) << 24) | 0x001C4E39;
+    TESForm* token = LookupFormByID(tokenFormID);
+    if (!token)
+        return false;
+
+    Actor* player = *g_thePlayer;
+    SInt32 count = 0;
+
+    // The base container supplies the starting count.
+    TESContainer* container = player->GetContainer();
+    if (container)
+    {
+        TESContainer::Data* baseEntry = container->DataByType(token);
+        if (baseEntry)
+            count += baseEntry->count;
+    }
+
+    // ExtraContainerChanges supplies additions/removals relative to the base count.
+    ExtraContainerChanges* changes =
+        static_cast<ExtraContainerChanges*>(
+            player->baseExtraList.GetByType(kExtraData_ContainerChanges));
+
+    if (changes)
+    {
+        ExtraContainerChanges::EntryData* changedEntry = changes->GetByType(token);
+        if (changedEntry)
+            count += changedEntry->countDelta;
+    }
+
+    return count > 0;
+}
+
+/*************************
+	Actor Values
+*************************/
+
+CBAS_ActorVals::CBAS_ActorVals(Actor* a) :
+		SPD(a->GetActorValue(kActorVal_Speed)),
+		AGI(a->GetActorValue(kActorVal_Agility)),
+		_FTG(a->GetBaseActorValue(kActorVal_Fatigue))
+	{
+		t = GetTickCount();
+		//Weapon info
+		actorRef = a->refID;
+		wep = GetEquippedWeapon(a);
+	}
+
+
+
+bool CBAS_ActorVals::OutOfDate(CBAS_ActorVals* compareWith) {
+	return (AA_DIFF(wep->ref,0) ||  ((t + UPDATE_INTERVAL) < compareWith->t) || AA_DIFF(_FTG,10));
+}
+
+
+
+void CBAS_ActorVals::UpdateAttackSpeed(Actor* a) {
+	//attack speed being updated, so update time
+	t = GetTickCount();
+	aSpd = DEFAULT_ATTACK_SPEED;
+
+	const SInt32 STR = a->GetActorValue(kActorVal_Strength);
+
+	//Attack [F]actors
+	//
+	float ftgF = CBAS_Lib::FatigueFactor(a,_FTG,GETINI(CBAS_FatigueThreshold));					//fatigue
+	float encF = CBAS_Lib::EncumbranceFactor(a,STR,GETINI(CBAS_LocalisedEncumbrance));			//encumbrance
+	float skillF = CBAS_Lib::SkillFactor(a,wep->type);											//skill in equipped weapon (e.g. blade, blunt)
+
+	float attrF = CBAS_Lib::AttrFactor(a,STR,wep->type,wep->weight);							//main attribute factor, depends on weapon type, e.g. melee weapons use str, bows use agi
+	float alacrF = SPD > AGI ? SPD*.01f : AGI*.01f;												//
+
+
+	if( (*CBAS_IniHandler)() ){		//this gets whether or not we should use all components
+		aSpd = ftgF*encF*skillF*attrF*alacrF;
+	} else {
+		aSpd = 
+			PRSNK_UNDERWEIGH(ftgF,GETINI(CBAS_FatigueComponent)) *
+			PRSNK_UNDERWEIGH(encF,GETINI(CBAS_FatigueComponent)) *
+			PRSNK_UNDERWEIGH(skillF,GETINI(CBAS_SkillComponent)) *
+			PRSNK_UNDERWEIGH(attrF,GETINI(CBAS_AttributeComponent)) *
+			PRSNK_UNDERWEIGH(alacrF,GETINI(CBAS_AlacrityComponent));
+	}
+
+#if _DEBUG
+	_MESSAGE("	Calculating attack speed...");
+	_MESSAGE("		Fatigue factor: %f",ftgF);
+	_MESSAGE("		Encumbrance factor: %f",encF);
+	_MESSAGE("		Skill factor: %f",skillF);
+	_MESSAGE("		Attribute factor: %f",attrF);
+	_MESSAGE("		Alacrity factor: %f",alacrF);
+	_MESSAGE("			MaxSpeed [weight: %f]: %f",wep->weight,PRSNK_MAX_WEAP_SPEED(wep->weight));
+	_MESSAGE("	Full modification factor (PRE PRSNK %f)",aSpd);
+#endif
+
+	aSpd = PRSNK_FACTOR_CONFIG(aSpd,CBAS_IniHandler->LowComplement,CBAS_IniHandler->LowMult);
+
+	_DOUT("	Final calculation speed: [%f x %f]",PRSNK_MAX_WEAP_SPEED(wep->weight),aSpd);
+
+	aSpd *= PRSNK_MAX_WEAP_SPEED(wep->weight);
+
+	_DOUT("	Raw (POST PRSNK): %f",aSpd);
+
+	aSpd *= GETINI(CBAS_FinalMult);
+	
+
+	_DOUT("	Final (Config Multiplier): %f",aSpd);
+	}
+
+
+
+/*************************
+	Actor Tracker
+*************************/
+
+CBAS_Actors::CBAS_Actors() {
+	t_c = GetTickCount();		//construct with current time as last cleansed time(s)
+}	
+
+
+//cleanse actor map every so often so long play sessions don't fill up map with actor data
+void CBAS_Actors::CleanseActorMap() {
+	t_c = GetTickCount();
+_DOUT("	Cleansing old actors!");
+	CBAS_AVMap::iterator avIter;
+	for( avIter = ActorValuesMap.begin(); avIter != ActorValuesMap.end(); avIter++){
+_DOUT("		Checking actor %s (%x)...",GetFullName(LookupFormByID(avIter->first)),avIter->first);
+	if( TIME_PASSED(avIter->second->t,CLEANSE_INTERVAL) ) {
+
+_DOUT("			Cleansing actor!");
+
+			ActorValuesMap.erase(avIter->first);	//erasing an actor from the map, invalidating the iterator
+			CleanseActorMap();	//start a new loop in case there are any more actors to erase
+			break;
+		}
+	}
+}
+
+
+void CBAS_Actors::CleanseAnimDataMap() {
+	t_c = GetTickCount();
+
+_DOUT("	Cleansing old animdata!");
+
+	CBAS_AADMap::iterator aadIter;
+	for( aadIter = AnimDataMap.begin(); aadIter != AnimDataMap.end(); aadIter++){
+
+_DOUT("		Checking animdata %i...",GetFullName(LookupFormByID(aadIter->first)),aadIter->first);
+
+		if( TIME_PASSED(aadIter->second,CLEANSE_INTERVAL) ) {
+_DOUT("			Cleansing animdata!");
+			AnimDataMap.erase(aadIter->first);	//erasing an actor from the map, invalidating the iterator
+			CleanseActorMap();	//start a new loop in case there are any more actors to erase
+			break;
+		}
+	}
+}
+
+
+
+
+void CBAS_Actors::LoadIniValues() {
+#ifdef _DEBUG
+	delete CBAS_IniHandler;
+#endif
+	CBAS_IniHandler = new CBAS_Config::IniHandler();
+}
+
+float CBAS_Actors::AttackSpeedFromActor(Actor* a){
+	bool actorExists = ActorValuesMap.count(a->refID) > 0;		//first find out if this actor already exists in the map
+	bool update = false;	//do we need to calc a new attack speed for the actor?
+
+	CBAS_ActorVals* AV;
+	CBAS_ActorVals *n_AV = new CBAS_ActorVals(a);		//new actor vals to compare against
+
+	//No need to proceed if actor is wielding a weapon type that is disabled
+	if( ((n_AV->wep->type == CBAS_Lib::kType_Bow) && !GETINI(CBAS_Bows)) 
+		||  ((n_AV->wep->type == CBAS_Lib::kType_Staff) && !GETINI(CBAS_Staves))
+		||  ((n_AV->wep->type == CBAS_Lib::kType_HandToHand) && !GETINI(CBAS_Hands)) ) {
+		return 1.0;
+	}
+
+	if( actorExists ){
+		AV = ActorValuesMap[a->refID];
+		AV = ActorValuesMap.at(a->refID);	//get actor from map
+		update = AV->OutOfDate(n_AV);	//is this actor out of date?
+	}
+
+	if( !actorExists || update ){
+		//use the new actor as the current one in the map
+		AV = n_AV;
+
+#if _DEBUG
+	DWORD ticks = (AV->t - t_c) / 1000;
+	const DWORD seconds = ticks % 60;
+	ticks /= 60;
+	const DWORD minutes = ticks % 60;
+	ticks /= 60;
+	const DWORD hours = ticks; // may exceed 24 hours.
+	const char* addOr = actorExists ? "Updating" : "Adding";
+	_MESSAGE("[Time: %d:%02d:%02d (%d)]: %s actor %s (%X)!",hours, minutes, seconds, AV->t,addOr,GetFullName(a),a->refID);
+#endif
+
+		//calculate attack speed for new actor
+		AV->UpdateAttackSpeed(a);
+		//put new actor in place
+		ActorValuesMap[AV->actorRef] = AV;
+	}
+
+	//clean old actors every so often
+	if( update && TIME_PASSED(t_c,CLEANSE_CHECK_INTERVAL) ) { CleanseActorMap(); CleanseAnimDataMap(); }
+
+#if _DEBUG
+	//TESObjectWEAP* eqObj = (TESObjectWEAP*)LookupFormByID(AV->wepRef);
+	//_MESSAGE("[Time: %d]: Returning attack speed for actor %s using weapon %s with weight %f to %f!",AV->t,GetFullName(a),GetFullName(eqObj),AV->wWgt,AV->aSpd);
+	//_MESSAGE("(Actor existed in map? %d. Actor needed updating? %d.)",actorExists, update);
+#endif
+	// Apply Quicksilver dynamically so token pickup/removal is not delayed by
+	// CBAS's 2-second actor-value cache. AV->aSpd remains the unboosted base value.
+	float result = AV->aSpd;
+	if (g_thePlayer && a == *g_thePlayer && PlayerHasFocusToken())
+		result *= GETINI(QS_PlayerAttackMultiplier);
+
 	return result;
 }
 
