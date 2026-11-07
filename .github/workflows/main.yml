@@ -11,6 +11,10 @@ jobs:
     runs-on: windows-2022
 
     steps:
+      - name: Download Quicksilver development source
+        uses: actions/checkout@v4
+        with:
+          path: Quicksilver    
       - name: Download CBAS source
         uses: actions/checkout@v4
         with:
@@ -217,15 +221,14 @@ jobs:
           )
 
           Set-Content $props $content
-      - name: Locate Quicksilver CBAS source
+      - name: Apply Quicksilver CBAS changes
         shell: pwsh
         run: |
-          Write-Host "WORKSPACE:"
-          Write-Host $env:GITHUB_WORKSPACE
-
-          Write-Host "SEARCHING FOR CBAS_Actor.cpp:"
-          Get-ChildItem $env:GITHUB_WORKSPACE -Recurse -Filter CBAS_Actor.cpp |
-            Select-Object -ExpandProperty FullName
+          Copy-Item `
+            "$env:GITHUB_WORKSPACE\Quicksilver\CBAS_Actor.cpp" `
+            "$env:GITHUB_WORKSPACE\CBAS\CBAS_Actor.cpp" `
+            -Force
+          Write-Host "Applied Quicksilver CBAS_Actor.cpp"
       - name: Build original CBAS
         shell: pwsh
         run: |
